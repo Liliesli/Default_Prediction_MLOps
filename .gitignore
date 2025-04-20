@@ -3,3 +3,14 @@
 __pycache__
 build
 server/src/data/**
+server/src/.models/
+
+# Python packaging
+dist/
+*.egg-info/
+
+# Mac OS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
