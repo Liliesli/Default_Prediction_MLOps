@@ -1,6 +1,8 @@
 import warnings
 from sklearn.metrics import f1_score, roc_auc_score
 import joblib
+import json
+from pathlib import Path
 
 from .__models_registry import Models, models_registry
 from .preprocess import prepare_dataset
@@ -23,10 +25,43 @@ def train_logistic(X_train, X_val, y_train, y_val):
     joblib.dump(model, MODEL_OUTPUT_DIR / models_registry[Models.LOGISTIC].filename)
     return model
 
+def save_metrics(metrics, model_type):
+    metrics_file = MODEL_OUTPUT_DIR / "model_metrics.json"
+    if metrics_file.exists():
+        with open(metrics_file, 'r') as f:
+            all_metrics = json.load(f)
+    else:
+        all_metrics = {}
+    
+    all_metrics[model_type] = metrics
+    
+    with open(metrics_file, 'w') as f:
+        json.dump(all_metrics, f, indent=4)
+
 def evaluate_model(model, X_val, y_val):
     y_pred = model.predict(X_val)
-    print("F1 Score:", f1_score(y_val, y_pred))
-    print("AUC Score:", roc_auc_score(y_val, model.predict_proba(X_val)[:, 1]))
+    f1 = f1_score(y_val, y_pred)
+    auc = roc_auc_score(y_val, model.predict_proba(X_val)[:, 1])
+    
+    print("F1 Score:", f1)
+    print("AUC Score:", auc)
+    
+    return {
+        "f1_score": f1,
+        "auc_score": auc
+    }
+
+def get_best_model_type():
+    metrics_file = MODEL_OUTPUT_DIR / "model_metrics.json"
+    if not metrics_file.exists():
+        return "xgboost"  # 기본값
+        
+    with open(metrics_file, 'r') as f:
+        metrics = json.load(f)
+    
+    # AUC 점수를 기준으로 최적의 모델 선택
+    best_model = max(metrics.items(), key=lambda x: x[1]['auc_score'])
+    return best_model[0]
 
 def train(model_type="xgboost"):
     X_train, X_val, y_train, y_val, encoder = prepare_dataset(
@@ -47,10 +82,16 @@ def train(model_type="xgboost"):
     else:
         raise ValueError(f"Unknown model type: {model_type}")
     
-    # Evaluate the model
+    # Evaluate the model and save metrics
     print(f"\nEvaluating {model_type} model:")
-    evaluate_model(model, X_val, y_val)
+    metrics = evaluate_model(model, X_val, y_val)
+    save_metrics(metrics, model_type)
+    
+    # Save best model type
+    best_model_type = get_best_model_type()
+    with open(MODEL_OUTPUT_DIR / "best_model.txt", 'w') as f:
+        f.write(best_model_type)
 
 if __name__ == "__main__":
-    train("xgboost") 
+    train("xgboost")
     train("logistic") 
